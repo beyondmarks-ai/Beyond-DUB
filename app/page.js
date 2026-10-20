@@ -41,10 +41,9 @@ export default function Home() {
   const polling = useRef(null);
   const originalVideo = useRef(null);
 
-  useEffect(() => () => {
-    clearTimeout(polling.current);
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
+  useEffect(() => () => clearTimeout(polling.current), []);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  useEffect(() => () => { if (download.startsWith("blob:")) URL.revokeObjectURL(download); }, [download]);
 
   function chooseFile(selected) {
     if (!selected) return;
@@ -95,9 +94,12 @@ export default function Home() {
       if (["failed", "deleted"].includes(result.status)) throw new Error(result.error_message || "The dubbing job failed.");
       const video = result.exports?.find((item) => item.export_type === "video" && item.status === "completed" && !item.is_stale);
       if (video?.download_url) {
+        setProgress(96);
+        setStatus("Restoring the original music and ambience…");
+        const mixedUrl = await restoreBackground(jobId);
         setProgress(100);
-        setStatus("Your translated video is ready");
-        setDownload(video.download_url);
+        setStatus("Your translated video is ready with its background preserved");
+        setDownload(mixedUrl);
         return;
       }
       setJob({ jobId, detectedLanguage });
@@ -105,6 +107,18 @@ export default function Home() {
     } catch (reason) {
       fail(reason.message || "Could not check the job.");
     }
+  }
+
+  async function restoreBackground(jobId) {
+    const data = new FormData();
+    data.set("video", file);
+    data.set("job", jobId);
+    const response = await fetch("/api/mix", { method: "POST", body: data });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || "Could not restore the background audio.");
+    }
+    return URL.createObjectURL(await response.blob());
   }
 
   function fail(message) {
@@ -205,7 +219,7 @@ export default function Home() {
             </div>
             {error && <div className="error" role="alert">{error}</div>}
             <button className="primary" type="submit" disabled={!file}><SparkIcon /> Detect language & translate</button>
-            <p className="fine-print">Supports 12 languages · 15 preset voices or source voice cloning · Sarvam charges apply</p>
+            <p className="fine-print">Supports 12 languages · AI background preservation · Sarvam charges apply</p>
           </form>
         ) : (
           <div className="job" aria-live="polite">
