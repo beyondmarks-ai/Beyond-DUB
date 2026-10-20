@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { promisify } from "node:util";
-import { createDubbingJob, detectLanguage, dubbingLanguages, voiceSettings } from "../../../lib/sarvam.js";
+import { createDubbingJob, detectLanguage, dubbingLanguages, translationRegister, voiceSettings } from "../../../lib/sarvam.js";
 
 const run = promisify(execFile);
 const maxBytes = 250 * 1024 * 1024;
@@ -18,9 +18,12 @@ export async function POST(request) {
     const video = form.get("video");
     const target = form.get("target");
     const voice = form.get("voice");
+    const speakers = form.get("speakers");
+    const register = form.get("register");
     if (!video || typeof video.arrayBuffer !== "function") throw new Error("Choose a video file.");
     if (!dubbingLanguages.has(target)) throw new Error("Choose a supported target language.");
-    voiceSettings(voice);
+    voiceSettings(voice, speakers);
+    translationRegister(register);
     if (!video.size) throw new Error("The selected video is empty.");
     if (video.size > maxBytes) throw new Error("This demo accepts videos up to 250 MB.");
 
@@ -39,6 +42,8 @@ export async function POST(request) {
       source: detectedLanguage,
       target,
       voice,
+      speakers,
+      register,
     });
     return Response.json({ jobId, detectedLanguage });
   } catch (error) {

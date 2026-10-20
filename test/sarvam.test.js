@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dubbingLanguages, dubbingVoices, normalizeLanguage, voiceSettings } from "../lib/sarvam.js";
+import { dubbingLanguages, dubbingVoices, normalizeLanguage, translationRegister, voiceSettings } from "../lib/sarvam.js";
 
 test("maps the STT Odia code to the dubbing API code", () => {
   assert.equal(normalizeLanguage("od-IN"), "or-IN");
@@ -21,5 +21,13 @@ test("uses only the live Sarvam dubbing voice catalog", () => {
     num_speakers: 1,
   });
   assert.deepEqual(voiceSettings("clone"), { voice_cloning: true, num_speakers: 1 });
+  assert.deepEqual(voiceSettings("clone", "-1"), { voice_cloning: true, num_speakers: -1 });
+  assert.throws(() => voiceSettings("ishita", "2"), /one speaker/);
   assert.throws(() => voiceSettings("unknown"), /supported Sarvam voice/);
+});
+
+test("accepts only Sarvam dubbing translation styles", () => {
+  assert.equal(translationRegister("auto"), "auto");
+  assert.equal(translationRegister("academic"), "academic");
+  assert.throws(() => translationRegister("cinematic"), /supported translation style/);
 });

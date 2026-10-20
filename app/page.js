@@ -17,18 +17,29 @@ const voices = [
   ["shubh", "Shubh"], ["simran", "Simran"], ["sumit", "Sumit"],
 ];
 const voiceName = Object.fromEntries(voices);
+const registers = [
+  ["auto", "Auto tone"], ["modern-colloquial", "Modern & casual"],
+  ["common-indic", "Clear & widely understood"], ["formal", "Formal"],
+  ["academic", "Academic"], ["classic-colloquial", "Classic colloquial"],
+];
+const registerName = Object.fromEntries(registers);
+const speakerOptions = [["-1", "Auto-detect"], ...Array.from({ length: 10 }, (_, index) => [String(index + 1), String(index + 1)])];
 
 export default function Home() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [target, setTarget] = useState("hi-IN");
   const [voice, setVoice] = useState("ishita");
+  const [speakers, setSpeakers] = useState("-1");
+  const [register, setRegister] = useState("auto");
+  const [audioSide, setAudioSide] = useState("translated");
   const [job, setJob] = useState(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("Choose a video to begin");
   const [download, setDownload] = useState("");
   const [error, setError] = useState("");
   const polling = useRef(null);
+  const originalVideo = useRef(null);
 
   useEffect(() => () => {
     clearTimeout(polling.current);
@@ -60,6 +71,8 @@ export default function Home() {
       data.set("video", file);
       data.set("target", target);
       data.set("voice", voice);
+      data.set("speakers", voice === "clone" ? speakers : "1");
+      data.set("register", register);
       const response = await fetch("/api/dub", { method: "POST", body: data });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
@@ -109,6 +122,16 @@ export default function Home() {
     setDownload("");
     setError("");
     setStatus("Ready to detect and translate");
+    setAudioSide("translated");
+  }
+
+  function syncOriginal(event) {
+    const original = originalVideo.current;
+    const translated = event.currentTarget;
+    if (!original) return;
+    if (Math.abs(original.currentTime - translated.currentTime) > 0.2) original.currentTime = translated.currentTime;
+    if (event.type === "play") original.play().catch(() => {});
+    if (event.type === "pause") original.pause();
   }
 
   const busy = Boolean(job) && !download;
@@ -126,8 +149,9 @@ export default function Home() {
         <p>Upload a video in any supported language. We detect the speech and create a clean dub aligned to the original timing.</p>
         <div className="trust-row" aria-label="Features">
           <span><CheckIcon /> Auto language detection</span>
-          <span><CheckIcon /> 15 voices or voice clone</span>
-          <span><CheckIcon /> Segment-aligned timing</span>
+          <span><CheckIcon /> Multi-speaker voice cloning</span>
+          <span><CheckIcon /> Music & ambience preserved</span>
+          <span><CheckIcon /> Synced A/B review</span>
         </div>
       </section>
 
@@ -164,6 +188,20 @@ export default function Home() {
                 </select>
                 <p>{voice === "clone" ? "Sarvam recreates the source speaker's voice." : `Sarvam preset voice: ${voiceName[voice]}.`}</p>
               </div>
+              <div className="field">
+                <label htmlFor="speakers">Speakers</label>
+                <select id="speakers" value={voice === "clone" ? speakers : "1"} disabled={voice !== "clone"} onChange={(event) => setSpeakers(event.target.value)}>
+                  {speakerOptions.map(([value, name]) => <option value={value} key={value}>{name}</option>)}
+                </select>
+                <p>{voice === "clone" ? "Each detected speaker keeps a distinct cloned voice." : "Preset voices are designed for one narrator."}</p>
+              </div>
+              <div className="field">
+                <label htmlFor="register">Translation style</label>
+                <select id="register" value={register} onChange={(event) => setRegister(event.target.value)}>
+                  {registers.map(([value, name]) => <option value={value} key={value}>{name}</option>)}
+                </select>
+                <p>Controls how formal or conversational the translation sounds.</p>
+              </div>
             </div>
             {error && <div className="error" role="alert">{error}</div>}
             <button className="primary" type="submit" disabled={!file}><SparkIcon /> Detect language & translate</button>
@@ -174,18 +212,25 @@ export default function Home() {
             <div className={`status-icon ${download ? "complete" : ""}`} aria-hidden="true">{download ? <CheckIcon /> : <WaveIcon />}</div>
             <span className="job-label">{download ? "COMPLETE" : "TRANSLATING"}</span>
             <h2>{status}</h2>
-            {job?.detectedLanguage && <p>Source: <strong>{languageName[job.detectedLanguage] || job.detectedLanguage}</strong> → <strong>{languageName[target]}</strong> · Voice: <strong>{voiceName[voice]}</strong></p>}
+            {job?.detectedLanguage && <p>Source: <strong>{languageName[job.detectedLanguage] || job.detectedLanguage}</strong> → <strong>{languageName[target]}</strong> · Voice: <strong>{voiceName[voice]}</strong> · Style: <strong>{registerName[register]}</strong></p>}
             <div className="progress" aria-label={`${progress}% complete`}><span style={{ width: `${progress}%` }}></span></div>
             <b>{progress}%</b>
             {download && <>
+              <div className="review-controls" aria-label="Comparison audio">
+                <span><i></i> Playback synced</span>
+                <div>
+                  <button type="button" className={audioSide === "original" ? "selected" : ""} onClick={() => setAudioSide("original")}>Hear original</button>
+                  <button type="button" className={audioSide === "translated" ? "selected" : ""} onClick={() => setAudioSide("translated")}>Hear translation</button>
+                </div>
+              </div>
               <div className="comparison">
                 <figure>
                   <figcaption>Original</figcaption>
-                  <video src={preview} controls playsInline preload="metadata">Your browser does not support video playback.</video>
+                  <video ref={originalVideo} src={preview} muted={audioSide !== "original"} playsInline preload="metadata" aria-label="Synchronized original video">Your browser does not support video playback.</video>
                 </figure>
                 <figure>
                   <figcaption>Translated to {languageName[target]}</figcaption>
-                  <video src={download} controls playsInline preload="metadata">Your browser does not support video playback.</video>
+                  <video src={download} muted={audioSide !== "translated"} controls playsInline preload="metadata" onPlay={syncOriginal} onPause={syncOriginal} onSeeking={syncOriginal} onTimeUpdate={syncOriginal}>Your browser does not support video playback.</video>
                 </figure>
               </div>
               <div className="actions"><button className="secondary" type="button" onClick={reset}>Translate another</button></div>
