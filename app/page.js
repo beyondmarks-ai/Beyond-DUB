@@ -33,6 +33,9 @@ export default function Home() {
   const [speakers, setSpeakers] = useState("-1");
   const [register, setRegister] = useState("auto");
   const [audioSide, setAudioSide] = useState("translated");
+  const [backgroundBoost, setBackgroundBoost] = useState(12);
+  const [appliedBoost, setAppliedBoost] = useState(12);
+  const [remixing, setRemixing] = useState(false);
   const [job, setJob] = useState(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("Choose a video to begin");
@@ -94,12 +97,14 @@ export default function Home() {
       if (["failed", "deleted"].includes(result.status)) throw new Error(result.error_message || "The dubbing job failed.");
       const video = result.exports?.find((item) => item.export_type === "video" && item.status === "completed" && !item.is_stale);
       if (video?.download_url) {
+        setJob({ jobId, detectedLanguage });
         setProgress(96);
         setStatus("Restoring the original music and ambience…");
         const mixedUrl = await restoreBackground(jobId);
         setProgress(100);
         setStatus("Your translated video is ready with its background preserved");
         setDownload(mixedUrl);
+        setAppliedBoost(backgroundBoost);
         return;
       }
       setJob({ jobId, detectedLanguage });
@@ -113,12 +118,27 @@ export default function Home() {
     const data = new FormData();
     data.set("video", file);
     data.set("job", jobId);
+    data.set("backgroundBoost", String(backgroundBoost));
     const response = await fetch("/api/mix", { method: "POST", body: data });
     if (!response.ok) {
       const result = await response.json().catch(() => ({}));
       throw new Error(result.error || "Could not restore the background audio.");
     }
     return URL.createObjectURL(await response.blob());
+  }
+
+  async function remix() {
+    setRemixing(true);
+    setError("");
+    try {
+      const mixedUrl = await restoreBackground(job.jobId);
+      originalVideo.current?.pause();
+      setDownload(mixedUrl);
+      setAppliedBoost(backgroundBoost);
+      setAudioSide("translated");
+    } catch (reason) {
+      setError(reason.message || "Could not update the mix. Your previous video is still available.");
+    } finally { setRemixing(false); }
   }
 
   function fail(message) {
@@ -230,6 +250,14 @@ export default function Home() {
             <div className="progress" aria-label={`${progress}% complete`}><span style={{ width: `${progress}%` }}></span></div>
             <b>{progress}%</b>
             {download && <>
+              <div className="background-controls field">
+                <label htmlFor="background-boost">Background volume: +{backgroundBoost} dB</label>
+                <input id="background-boost" type="range" min="0" max="18" step="3" value={backgroundBoost} disabled={remixing} onChange={(event) => setBackgroundBoost(Number(event.target.value))} />
+                <p>0 = original background level. Current video: +{appliedBoost} dB. Changes apply after mixing.</p>
+                <button className="secondary" type="button" onClick={remix} disabled={remixing || backgroundBoost === appliedBoost}>{remixing ? "Updating background audio…" : "Apply background level"}</button>
+                <p>Reuses your translation. Separation may remove sung lyrics along with speech.</p>
+                {error && <div className="error" role="alert">{error}</div>}
+              </div>
               <div className="review-controls" aria-label="Comparison audio">
                 <span><i></i> Playback synced</span>
                 <div>
@@ -247,7 +275,7 @@ export default function Home() {
                   <video src={download} muted={audioSide !== "translated"} controls playsInline preload="metadata" onPlay={syncOriginal} onPause={syncOriginal} onSeeking={syncOriginal} onTimeUpdate={syncOriginal}>Your browser does not support video playback.</video>
                 </figure>
               </div>
-              <div className="actions"><button className="secondary" type="button" onClick={reset}>Translate another</button></div>
+              <div className="actions"><button className="secondary" type="button" onClick={reset} disabled={remixing}>Translate another</button></div>
             </>}
           </div>
         )}

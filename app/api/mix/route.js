@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { backgroundStem, demucsCommand, maxMediaBytes, mixArguments } from "../../../lib/background.js";
+import { backgroundGain, backgroundStem, demucsCommand, maxMediaBytes, mixArguments } from "../../../lib/background.js";
 import { getDubbingStatus } from "../../../lib/sarvam.js";
 
 const run = promisify(execFile);
@@ -15,6 +15,7 @@ export async function POST(request) {
   let directory;
   try {
     const form = await request.formData();
+    const boost = backgroundGain(form.has("backgroundBoost") ? Number(form.get("backgroundBoost")) : 12);
     const video = form.get("video");
     const jobId = form.get("job")?.trim();
     if (!video || typeof video.arrayBuffer !== "function") throw new Error("The original video is required for background preservation.");
@@ -43,7 +44,7 @@ export async function POST(request) {
 
     const separation = demucsCommand(sourcePath, stemsPath);
     await run(separation.command, separation.args, { maxBuffer: 8 * 1024 * 1024 });
-    await run("ffmpeg", mixArguments(dubbedPath, backgroundStem(stemsPath), outputPath), { maxBuffer: 8 * 1024 * 1024 });
+    await run("ffmpeg", mixArguments(dubbedPath, backgroundStem(stemsPath), outputPath, boost), { maxBuffer: 8 * 1024 * 1024 });
     const output = await readFile(outputPath);
     return new Response(output, {
       headers: {
