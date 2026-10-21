@@ -38,3 +38,10 @@ The key remains server-side. The demo accepts files up to 250 MB and supports Sa
 npm test
 npm run build
 ```
+
+<!-- beyond-marks-credit:start -->
+---
+### Built by Beyond Marks AI Academy
+
+Developed by **Rakesh Kumar** at [Beyond Marks AI Academy](https://beyondmarks.ai).
+<!-- beyond-marks-credit:end -->
